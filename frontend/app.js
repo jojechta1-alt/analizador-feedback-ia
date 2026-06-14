@@ -57,6 +57,7 @@ async function analyzeText() {
             body: JSON.stringify({ review_text: textToSend })
         });
 
+        // Si el backend responde con códigos de error HTTP (como 400 o 500)
         if (!response.ok) {
             throw new Error("La respuesta del servidor no fue exitosa.");
         }
@@ -71,7 +72,6 @@ async function analyzeText() {
             textArea.value = ""; // Limpiar el cuadro de texto
 
             // --- ACTUALIZACIÓN LOCAL PERMANENTE ---
-            // Modificamos el conteo de sentimientos global al instante
             if (aiSentiment.includes('positiv')) {
                 currentData.positivos++;
             } else if (aiSentiment.includes('negativ')) {
@@ -93,14 +93,14 @@ async function analyzeText() {
                 currentData.categorias["General"]++;
             }
 
-            // Insertamos el registro de forma permanente en la lista local para evitar que se borre
+            // Insertamos el registro en la lista local
             localReviewsList.push({
                 text: textToSend,
                 sentiment: result.data.sentiment,
                 category: result.data.category
             });
 
-            // Actualizar tarjetas numéricas HTML instantáneamente con la nueva suma
+            // Actualizar tarjetas numéricas HTML
             const totalEl = document.getElementById("stat-total");
             const posEl = document.getElementById("stat-pos");
             const negEl = document.getElementById("stat-neg");
@@ -109,12 +109,13 @@ async function analyzeText() {
             if (posEl) posEl.innerText = currentData.positivos;
             if (negEl) negEl.innerText = currentData.negativos;
 
-            // Forzar renderizado inmediato de los gráficos con los nuevos datos locales
-            // SIN TEMPORIZADORES QUE SOBREESCRIBAN LA INFORMACIÓN ABAJO
+            // Forzar renderizado inmediato de los gráficos
             updateCharts(currentData.positivos, currentData.negativos, currentData.neutrales, currentData.categorias);
 
         } else {
-            showAlert("El backend procesó la solicitud pero no reportó éxito.", "error");
+            // CORRECCIÓN CLAVE: Ahora lee y muestra el mensaje técnico real devuelto por el backend
+            const mensajeError = result.message || "Error desconocido en el servidor.";
+            showAlert(`Error al guardar: ${mensajeError}`, "error");
         }
 
     } catch (error) {
