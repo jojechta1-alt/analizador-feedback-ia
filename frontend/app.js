@@ -24,7 +24,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 });
 
 // =====================================================================
-// FUNCTION: ANALIZAR RESEÑA INDIVIDUAL
+// FUNCTION: ANALIZAR RESEÑA INDIVIDUAL (CON ACTUALIZACIÓN AUTOMÁTICA EN TIEMPO REAL)
 // =====================================================================
 async function analyzeText() {
     const textArea = document.getElementById("text-input");
@@ -53,11 +53,18 @@ async function analyzeText() {
         const result = await response.json();
         
         if (result.status === "success") {
-            showAlert(`¡Análisis completado! Sentimiento: ${result.data.sentiment}`, "success");
-            textArea.value = ""; // Limpiar el cuadro de texto
+            // 1. Mostrar la alerta de éxito con el resultado de la IA
+            showAlert(`¡Análisis completado! Sentimiento: ${result.data.sentiment} | Categoría: ${result.data.category}`, "success");
             
-            // Esperar a que el backend guarde y refrescar inmediatamente
+            // 2. Limpiar el cuadro de texto inmediatamente para comodidad del usuario
+            textArea.value = ""; 
+            
+            // 3. PAUSA AUTOMÁTICA: Esperamos 500ms para asegurar la escritura completa en Supabase
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            // 4. REFRESCO AUTOMÁTICO: Llama a la base de datos y redibuja los gráficos en tiempo real
             await loadDashboardStats();
+            
         } else {
             showAlert("El backend procesó la solicitud pero no reportó éxito.", "error");
         }
@@ -170,7 +177,7 @@ function updateCharts(positivos, negativos, neutrales, categorias) {
         }
     }
 
-    // --- GRÁFICO 2: NUEVO GRÁFICO DE BARRAS HORIZONTALES CON LEYENDA (Reemplaza a la telaraña) ---
+    // --- GRÁFICO 2: NUEVO GRÁFICO DE BARRAS HORIZONTALES CON LEYENDA ---
     const ctxCategory = document.getElementById("chart-category");
     if (ctxCategory) {
         if (categoryChartInstance !== null) {
@@ -187,11 +194,11 @@ function updateCharts(positivos, negativos, neutrales, categorias) {
 
         try {
             categoryChartInstance = new Chart(ctxCategory, {
-                type: 'bar', // Cambiado a barras
+                type: 'bar',
                 data: {
                     labels: ['Atención', 'Calidad', 'Precio', 'Envío', 'General'],
                     datasets: [{
-                        label: 'Reseñas por Categoría', // Texto de la leyenda
+                        label: 'Reseñas por Categoría',
                         data: valoresBarras,
                         backgroundColor: [
                             'rgba(147, 51, 234, 0.7)',  // Morado para Atención
@@ -211,7 +218,7 @@ function updateCharts(positivos, negativos, neutrales, categorias) {
                     }]
                 },
                 options: {
-                    indexAxis: 'y', // Hace que las barras sean horizontales (más fácil de leer)
+                    indexAxis: 'y', 
                     responsive: true,
                     maintainAspectRatio: false,
                     scales: {
@@ -219,13 +226,13 @@ function updateCharts(positivos, negativos, neutrales, categorias) {
                             beginAtZero: true,
                             ticks: { 
                                 stepSize: 1,
-                                precision: 0 // Evita números decimales en el eje X
+                                precision: 0 
                             }
                         }
                     },
                     plugins: {
                         legend: { 
-                            display: true, // Habilitar la leyenda solicitada
+                            display: true, 
                             position: 'top' 
                         }
                     }
@@ -259,6 +266,9 @@ async function uploadCSV(event) {
 
         const result = await response.json();
         showAlert(`¡Éxito! Se procesaron ${result.total_processed} registros del CSV.`, "success");
+        
+        // Pausa de seguridad e igual se refresca de forma automática
+        await new Promise(resolve => setTimeout(resolve, 500));
         await loadDashboardStats();
     } catch (error) {
         console.error("Error CSV:", error);
