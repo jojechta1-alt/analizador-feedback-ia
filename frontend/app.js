@@ -1,22 +1,30 @@
-// URL de tu API en Hugging Face Spaces (Asegúrate de que termine sin la barra / al final)
+// URL de tu API en Hugging Face Spaces
 const API_URL = "https://jota2001-analizador-feedback.hf.space";
 
-// Variables globales para guardar las instancias de los gráficos y poder destruirlos/actualizarlos
+// Variables globales para guardar las instancias de los gráficos y los datos actuales
 let sentimentChartInstance = null;
 let categoryChartInstance = null;
 
+// Objeto global para mantener el estado de los datos en el frontend
+let currentData = {
+    positivos: 0,
+    negativos: 0,
+    neutrales: 0,
+    categorias: { "Atención": 0, "Calidad": 0, "Precio": 0, "Envío": 0, "General": 0 }
+};
+
 // Esperar a que el DOM esté completamente cargado para activar los listeners
 document.addEventListener("DOMContentLoaded", async () => {
-    // Forzar la carga inicial de estadísticas con await
+    // Carga inicial obligatoria
     await loadDashboardStats();
 
-    // Configurar el botón de análisis individual (ID exacto: btn-analyze-text)
+    // Configurar el botón de análisis individual
     const btnAnalyze = document.getElementById("btn-analyze-text");
     if (btnAnalyze) {
         btnAnalyze.addEventListener("click", analyzeText);
     }
 
-    // Configurar el input de carga masiva CSV (ID exacto: csv-input)
+    // Configurar el input de carga masiva CSV
     const fileInput = document.getElementById("csv-input");
     if (fileInput) {
         fileInput.addEventListener("change", uploadCSV);
@@ -24,7 +32,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 });
 
 // =====================================================================
-// FUNCTION: ANALIZAR RESEÑA INDIVIDUAL (CON ACTUALIZACIÓN AUTOMÁTICA EN TIEMPO REAL)
+// FUNCTION: ANALIZAR RESEÑA INDIVIDUAL (ACTUALIZACIÓN OPTIMISTA INMEDIATA)
 // =====================================================================
 async function analyzeText() {
     const textArea = document.getElementById("text-input");
@@ -53,18 +61,53 @@ async function analyzeText() {
         const result = await response.json();
         
         if (result.status === "success") {
-            // 1. Mostrar la alerta de éxito con el resultado de la IA
+            // Extraer el resultado directo que nos mandó la IA
+            const aiSentiment = String(result.data.sentiment || '').toLowerCase().trim();
+            const aiCategory = String(result.data.category || '').toLowerCase().trim();
+
             showAlert(`¡Análisis completado! Sentimiento: ${result.data.sentiment} | Categoría: ${result.data.category}`, "success");
+            textArea.value = ""; // Limpiar el cuadro de texto
+
+            // --- ACTUALIZACIÓN OPTIMISTA EN TIEMPO REAL ---
+            // Modificamos el conteo de sentimientos global al instante
+            if (aiSentiment === 'positivo' || aiSentiment === 'positive') {
+                currentData.positivos++;
+            } else if (aiSentiment === 'negativo' || aiSentiment === 'negative') {
+                currentData.negativos++;
+            } else {
+                currentData.neutrales++;
+            }
+
+            // Modificamos el conteo de categorías global al instante
+            if (aiCategory === 'soporte' || aiCategory === 'atención' || aiCategory === 'atencion' || aiCategory === 'servicio' || aiCategory === 'atención al cliente') {
+                currentData.categorias["Atención"]++;
+            } else if (aiCategory === 'producto' || aiCategory === 'calidad' || aiCategory === 'articulo' || aiCategory === 'artículo') {
+                currentData.categorias["Calidad"]++;
+            } else if (aiCategory === 'precio' || aiCategory === 'costo' || aiCategory === 'tarifa') {
+                currentData.categorias["Precio"]++;
+            } else if (aiCategory === 'envío' || aiCategory === 'envio' || aiCategory === 'entrega' || aiCategory === 'delivery') {
+                currentData.categorias["Envío"]++;
+            } else {
+                currentData.categorias["General"]++;
+            }
+
+            // Actualizar tarjetas de texto en el HTML instantáneamente
+            const totalEl = document.getElementById("stat-total");
+            const posEl = document.getElementById("stat-pos");
+            const negEl = document.getElementById("stat-neg");
             
-            // 2. Limpiar el cuadro de texto inmediatamente para comodidad del usuario
-            textArea.value = ""; 
+            if (totalEl) totalEl.innerText = currentData.positivos + currentData.negativos + currentData.neutrales;
+            if (posEl) posEl.innerText = currentData.positivos;
+            if (negEl) negEl.innerText = currentData.negativos;
+
+            // Renderizar los gráficos usando el estado local ya modificado
+            updateCharts(currentData.positivos, currentData.negativos, currentData.neutrales, currentData.categorias);
             
-            // 3. PAUSA AUTOMÁTICA: Esperamos 500ms para asegurar la escritura completa en Supabase
-            await new Promise(resolve => setTimeout(resolve, 500));
-            
-            // 4. REFRESCO AUTOMÁTICO: Llama a la base de datos y redibuja los gráficos en tiempo real
-            await loadDashboardStats();
-            
+            // Hacer un refresco secundario de fondo en la base de datos tras 2 segundos para asegurar sincronía perfecta
+            setTimeout(async () => {
+                await loadDashboardStats();
+            }, 2000);
+
         } else {
             showAlert("El backend procesó la solicitud pero no reportó éxito.", "error");
         }
@@ -80,24 +123,20 @@ async function analyzeText() {
 // =====================================================================
 async function loadDashboardStats() {
     try {
-        // Petición al endpoint del backend de Hugging Face
         const response = await fetch(`${API_URL}/api/dashboard-stats`);
         if (!response.ok) throw new Error("No se pudieron obtener las estadísticas.");
 
         const data = await response.json();
 
-        // Mapear los elementos visuales de las tarjetas numéricas en tu HTML
         const totalEl = document.getElementById("stat-total");
         const posEl = document.getElementById("stat-pos");
         const negEl = document.getElementById("stat-neg");
 
-        // Extraer los datos provenientes de la base de datos
         let listaResenas = data.raw_data || [];
         let positivos = data.positivo || 0;
         let negativos = data.negativo || 0;
         let totalReviews = data.total_reviews || 0;
 
-        // Recuento de respaldo directo en el frontend si los datos crudos existen pero venían en 0
         if (totalReviews === 0 && listaResenas.length > 0) {
             totalReviews = listaResenas.length;
             listaResenas.forEach(r => {
@@ -107,16 +146,13 @@ async function loadDashboardStats() {
             });
         }
 
-        // Actualizar los números de las tarjetas en caliente
         if (totalEl) totalEl.innerText = totalReviews;
         if (posEl) posEl.innerText = positivos;
         if (negEl) negEl.innerText = negativos;
 
-        // Calcular la cuota de comentarios neutrales
         let neutrales = totalReviews - positivos - negativos;
         if (neutrales < 0) neutrales = 0;
 
-        // --- PROCESAMIENTO ESTABLE DE CATEGORÍAS ---
         let categoriasLimpias = { "Atención": 0, "Calidad": 0, "Precio": 0, "Envío": 0, "General": 0 };
         
         listaResenas.forEach(r => {
@@ -134,7 +170,15 @@ async function loadDashboardStats() {
             }
         });
 
-        // Enviar los números frescos al generador de gráficos
+        // Guardar la data actual en la variable de estado global
+        currentData = {
+            positivos: positivos,
+            negativos: negativos,
+            neutrales: neutrales,
+            categorias: categoriasLimpias
+        };
+
+        // Pintar gráficos iniciales
         updateCharts(positivos, negativos, neutrales, categoriasLimpias);
 
     } catch (error) {
@@ -146,7 +190,6 @@ async function loadDashboardStats() {
 // FUNCTION: RENDERIZAR / ACTUALIZAR GRÁFICOS DINÁMICAMENTE
 // =====================================================================
 function updateCharts(positivos, negativos, neutrales, categorias) {
-    // --- GRÁFICO 1: SENTIMIENTOS (chart-sentiment) ---
     const ctxSentiment = document.getElementById("chart-sentiment");
     if (ctxSentiment) {
         if (sentimentChartInstance !== null) {
@@ -177,7 +220,6 @@ function updateCharts(positivos, negativos, neutrales, categorias) {
         }
     }
 
-    // --- GRÁFICO 2: NUEVO GRÁFICO DE BARRAS HORIZONTALES CON LEYENDA ---
     const ctxCategory = document.getElementById("chart-category");
     if (ctxCategory) {
         if (categoryChartInstance !== null) {
@@ -201,11 +243,11 @@ function updateCharts(positivos, negativos, neutrales, categorias) {
                         label: 'Reseñas por Categoría',
                         data: valoresBarras,
                         backgroundColor: [
-                            'rgba(147, 51, 234, 0.7)',  // Morado para Atención
-                            'rgba(33, 150, 243, 0.7)',   // Azul para Calidad
-                            'rgba(255, 152, 0, 0.7)',   // Naranja para Precio
-                            'rgba(0, 150, 136, 0.7)',   // Tejan para Envío
-                            'rgba(158, 158, 158, 0.7)'  // Gris para General
+                            'rgba(147, 51, 234, 0.7)',
+                            'rgba(33, 150, 243, 0.7)',
+                            'rgba(255, 152, 0, 0.7)',
+                            'rgba(0, 150, 136, 0.7)',
+                            'rgba(158, 158, 158, 0.7)'
                         ],
                         borderColor: [
                             'rgb(147, 51, 234)',
@@ -266,9 +308,6 @@ async function uploadCSV(event) {
 
         const result = await response.json();
         showAlert(`¡Éxito! Se procesaron ${result.total_processed} registros del CSV.`, "success");
-        
-        // Pausa de seguridad e igual se refresca de forma automática
-        await new Promise(resolve => setTimeout(resolve, 500));
         await loadDashboardStats();
     } catch (error) {
         console.error("Error CSV:", error);
@@ -277,7 +316,7 @@ async function uploadCSV(event) {
 }
 
 // =====================================================================
-// FUNCTION AUXILIAR: ALERTAS (ID: quick-result)
+// FUNCTION AUXILIAR: ALERTAS
 // =====================================================================
 function showAlert(message, type) {
     const alertBox = document.getElementById("quick-result");
