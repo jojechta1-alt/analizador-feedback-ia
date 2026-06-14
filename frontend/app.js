@@ -10,14 +10,14 @@ document.addEventListener("DOMContentLoaded", () => {
     // Cargar estadísticas iniciales al abrir la página
     loadDashboardStats();
 
-    // Configurar el botón de análisis individual de forma segura
-    const btnAnalyze = document.getElementById("btnAnalyze") || document.querySelector("button");
+    // Configurar el botón de análisis individual según tu HTML (id="btn-analyze-text")
+    const btnAnalyze = document.getElementById("btn-analyze-text");
     if (btnAnalyze) {
         btnAnalyze.addEventListener("click", analyzeText);
     }
 
-    // Configurar el input de carga masiva CSV de forma segura
-    const fileInput = document.getElementById("csvFile") || document.querySelector("input[type='file']");
+    // Configurar el input de carga masiva CSV según tu HTML (id="csv-input")
+    const fileInput = document.getElementById("csv-input");
     if (fileInput) {
         fileInput.addEventListener("change", uploadCSV);
     }
@@ -27,7 +27,7 @@ document.addEventListener("DOMContentLoaded", () => {
 // FUNCTION: ANALIZAR RESEÑA INDIVIDUAL
 // =====================================================================
 async function analyzeText() {
-    let textArea = document.getElementById("reviewInput") || document.querySelector("textarea");
+    const textArea = document.getElementById("text-input");
     
     if (!textArea || !textArea.value.trim()) {
         showAlert("Por favor, escribe una opinión válida.", "error");
@@ -78,15 +78,15 @@ async function loadDashboardStats() {
 
         const data = await response.json();
 
-        // 1. Buscar los elementos de las tarjetas en tu HTML de forma ultra segura
-        const totalEl = document.getElementById("totalReviewsCount") || document.getElementById("totalReviews") || document.getElementById("total-reviews");
-        const posEl = document.getElementById("positiveCount") || document.getElementById("positivo") || document.getElementById("positives");
-        const negEl = document.getElementById("negativeCount") || document.getElementById("negativo") || document.getElementById("negatives");
+        // 1. Mapear los IDs reales de tu archivo HTML
+        const totalEl = document.getElementById("stat-total");
+        const posEl = document.getElementById("stat-pos");
+        const negEl = document.getElementById("stat-neg");
 
-        // 2. Modificar el texto UNICAMENTE si el elemento de verdad existe en tu HTML. Si es null, no hace nada.
-        if (totalEl !== null && totalEl !== undefined) { totalEl.innerText = data.total_reviews || 0; }
-        if (posEl !== null && posEl !== undefined) { posEl.innerText = data.positivo || 0; }
-        if (negEl !== null && negEl !== undefined) { negEl.innerText = data.negativo || 0; }
+        // 2. Modificar el contenido de texto si existen
+        if (totalEl) totalEl.innerText = data.total_reviews || 0;
+        if (posEl) posEl.innerText = data.positivo || 0;
+        if (negEl) negEl.innerText = data.negativo || 0;
 
         // Calcular cuántos neutrales quedan de forma matemática
         const totalReviews = data.total_reviews || 0;
@@ -95,11 +95,11 @@ async function loadDashboardStats() {
         let neutrales = totalReviews - positivos - negativos;
         if (neutrales < 0) neutrales = 0;
 
-        // 3. Renderizar o actualizar los gráficos de forma directa
+        // 3. Renderizar o actualizar los gráficos directamente
         updateCharts(positivos, negativos, neutrales, data.categories);
 
     } catch (error) {
-        console.error("Error crítico atrapado en el cargador de estadísticas:", error);
+        console.error("Error cargando estadísticas:", error);
     }
 }
 
@@ -107,8 +107,8 @@ async function loadDashboardStats() {
 // FUNCTION: RENDERIZAR / ACTUALIZAR GRÁFICOS (CHART.JS)
 // =====================================================================
 function updateCharts(positivos, negativos, neutrales, categorias) {
-    // --- GRÁFICO 1: DISTRIBUCIÓN DE SENTIMIENTOS (DONUT / PASTEL) ---
-    const ctxSentiment = document.getElementById("sentimentChart") || document.getElementById("chartSentiment") || document.querySelector("canvas");
+    // --- GRÁFICO 1: DISTRIBUCIÓN DE SENTIMIENTOS (id="chart-sentiment") ---
+    const ctxSentiment = document.getElementById("chart-sentiment");
     if (ctxSentiment) {
         if (sentimentChartInstance) {
             sentimentChartInstance.destroy();
@@ -134,12 +134,12 @@ function updateCharts(positivos, negativos, neutrales, categorias) {
                 }
             });
         } catch (e) {
-            console.error("No se pudo inicializar el gráfico de torta:", e);
+            console.error("No se pudo inicializar el gráfico de sentimientos:", e);
         }
     }
 
-    // --- GRÁFICO 2: CATEGORÍAS DETECTADAS (RADAR) ---
-    const ctxCategory = document.getElementById("categoryChart") || document.getElementById("chartCategory") || document.querySelectorAll("canvas")[1];
+    // --- GRÁFICO 2: CATEGORÍAS DETECTADAS (id="chart-category") ---
+    const ctxCategory = document.getElementById("chart-category");
     if (ctxCategory) {
         if (categoryChartInstance) {
             categoryChartInstance.destroy();
@@ -172,7 +172,7 @@ function updateCharts(positivos, negativos, neutrales, categorias) {
                 }
             });
         } catch (e) {
-            console.error("No se pudo inicializar el gráfico de radar:", e);
+            console.error("No se pudo inicializar el gráfico de categorías:", e);
         }
     }
 }
@@ -207,29 +207,22 @@ async function uploadCSV(event) {
 }
 
 // =====================================================================
-// FUNCTION AUXILIAR: MOSTRAR ALERTAS VISUALES
+// FUNCTION AUXILIAR: MOSTRAR ALERTAS VISUALES (id="quick-result")
 // =====================================================================
 function showAlert(message, type) {
-    const alertBox = document.getElementById("alertBox") || document.getElementById("alert") || document.getElementById("mensaje");
-    if (!alertBox) {
-        alert(message);
-        return;
-    }
+    const alertBox = document.getElementById("quick-result");
+    if (!alertBox) return;
 
+    // Remover clases previas para evitar conflictos de color de Bootstrap
+    alertBox.className = "mt-3 alert rounded-3 small";
+    alertBox.classList.remove("d-none");
     alertBox.innerText = message;
-    alertBox.style.display = "block";
 
     if (type === "success") {
-        alertBox.style.backgroundColor = "#d1e7dd";
-        alertBox.style.color = "#0f5132";
-        alertBox.style.borderColor = "#badbcc";
+        alertBox.classList.add("alert-success");
     } else if (type === "error") {
-        alertBox.style.backgroundColor = "#f8d7da";
-        alertBox.style.color = "#842029";
-        alertBox.style.borderColor = "#f5c2c7";
+        alertBox.classList.add("alert-danger");
     } else {
-        alertBox.style.backgroundColor = "#cff4fc";
-        alertBox.style.color = "#055160";
-        alertBox.style.borderColor = "#b6effb";
+        alertBox.classList.add("alert-info");
     }
 }
