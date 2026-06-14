@@ -32,7 +32,7 @@ document.addEventListener("DOMContentLoaded", async () => {
 });
 
 // =====================================================================
-// FUNCTION: ANALIZAR RESEÑA INDIVIDUAL (ACTUALIZACIÓN OPTIMISTA INMEDIATA)
+// FUNCTION: ANALIZAR RESEÑA INDIVIDUAL (CORRECCIÓN DE STRINGS)
 // =====================================================================
 async function analyzeText() {
     const textArea = document.getElementById("text-input");
@@ -61,7 +61,7 @@ async function analyzeText() {
         const result = await response.json();
         
         if (result.status === "success") {
-            // Extraer el resultado directo que nos mandó la IA
+            // CORRECCIÓN CLAVE: Convertimos a minúsculas y removemos espacios en blanco
             const aiSentiment = String(result.data.sentiment || '').toLowerCase().trim();
             const aiCategory = String(result.data.category || '').toLowerCase().trim();
 
@@ -69,29 +69,29 @@ async function analyzeText() {
             textArea.value = ""; // Limpiar el cuadro de texto
 
             // --- ACTUALIZACIÓN OPTIMISTA EN TIEMPO REAL ---
-            // Modificamos el conteo de sentimientos global al instante
-            if (aiSentiment === 'positivo' || aiSentiment === 'positive') {
+            // Buscamos coincidencias sin importar si la IA responde con mayúsculas
+            if (aiSentiment.includes('positiv') || aiSentiment.includes('positiv')) {
                 currentData.positivos++;
-            } else if (aiSentiment === 'negativo' || aiSentiment === 'negative') {
+            } else if (aiSentiment.includes('negativ') || aiSentiment.includes('negativ')) {
                 currentData.negativos++;
             } else {
                 currentData.neutrales++;
             }
 
-            // Modificamos el conteo de categorías global al instante
-            if (aiCategory === 'soporte' || aiCategory === 'atención' || aiCategory === 'atencion' || aiCategory === 'servicio' || aiCategory === 'atención al cliente') {
+            // Normalización rigurosa para las categorías detectadas
+            if (aiCategory.includes('soport') || aiCategory.includes('atenci') || aiCategory.includes('atención') || aiCategory.includes('servici')) {
                 currentData.categorias["Atención"]++;
-            } else if (aiCategory === 'producto' || aiCategory === 'calidad' || aiCategory === 'articulo' || aiCategory === 'artículo') {
+            } else if (aiCategory.includes('product') || aiCategory.includes('calidad') || aiCategory.includes('articul') || aiCategory.includes('artículo')) {
                 currentData.categorias["Calidad"]++;
-            } else if (aiCategory === 'precio' || aiCategory === 'costo' || aiCategory === 'tarifa') {
+            } else if (aiCategory.includes('precio') || aiCategory.includes('costo') || aiCategory.includes('tarif')) {
                 currentData.categorias["Precio"]++;
-            } else if (aiCategory === 'envío' || aiCategory === 'envio' || aiCategory === 'entrega' || aiCategory === 'delivery') {
+            } else if (aiCategory.includes('enví') || aiCategory.includes('envio') || aiCategory.includes('entreg') || aiCategory.includes('deliver')) {
                 currentData.categorias["Envío"]++;
             } else {
                 currentData.categorias["General"]++;
             }
 
-            // Actualizar tarjetas de texto en el HTML instantáneamente
+            // Actualizar tarjetas numéricas HTML instantáneamente con la nueva suma
             const totalEl = document.getElementById("stat-total");
             const posEl = document.getElementById("stat-pos");
             const negEl = document.getElementById("stat-neg");
@@ -100,13 +100,13 @@ async function analyzeText() {
             if (posEl) posEl.innerText = currentData.positivos;
             if (negEl) negEl.innerText = currentData.negativos;
 
-            // Renderizar los gráficos usando el estado local ya modificado
+            // Forzar renderizado inmediato de los gráficos con los nuevos datos locales
             updateCharts(currentData.positivos, currentData.negativos, currentData.neutrales, currentData.categorias);
             
-            // Hacer un refresco secundario de fondo en la base de datos tras 2 segundos para asegurar sincronía perfecta
+            // Refresco de respaldo en la BD tras 2.5 segundos para mantener todo sincronizado
             setTimeout(async () => {
                 await loadDashboardStats();
-            }, 2000);
+            }, 2500);
 
         } else {
             showAlert("El backend procesó la solicitud pero no reportó éxito.", "error");
@@ -141,8 +141,8 @@ async function loadDashboardStats() {
             totalReviews = listaResenas.length;
             listaResenas.forEach(r => {
                 let sent = String(r.sentiment || '').toLowerCase().trim();
-                if (sent === 'positivo' || sent === 'positive') positivos++;
-                if (sent === 'negativo' || sent === 'negative') negativos++;
+                if (sent.includes('positiv')) positivos++;
+                if (sent.includes('negativ')) negativos++;
             });
         }
 
@@ -157,20 +157,20 @@ async function loadDashboardStats() {
         
         listaResenas.forEach(r => {
             let cat = String(r.category || '').toLowerCase().trim();
-            if (cat === 'soporte' || cat === 'atención' || cat === 'atencion' || cat === 'servicio' || cat === 'atención al cliente') {
+            if (cat.includes('soport') || cat.includes('atenci') || cat.includes('atención') || cat.includes('servici')) {
                 categoriasLimpias["Atención"]++;
-            } else if (cat === 'producto' || cat === 'calidad' || cat === 'articulo' || cat === 'artículo') {
+            } else if (cat.includes('product') || cat.includes('calidad') || cat.includes('articul') || cat.includes('artículo')) {
                 categoriasLimpias["Calidad"]++;
-            } else if (cat === 'precio' || cat === 'costo' || cat === 'tarifa') {
+            } else if (cat.includes('precio') || cat.includes('costo') || cat.includes('tarif')) {
                 categoriasLimpias["Precio"]++;
-            } else if (cat === 'envío' || cat === 'envio' || cat === 'entrega' || cat === 'delivery') {
+            } else if (cat.includes('enví') || cat.includes('envio') || cat.includes('entreg') || cat.includes('deliver')) {
                 categoriasLimpias["Envío"]++;
             } else {
                 categoriasLimpias["General"]++;
             }
         });
 
-        // Guardar la data actual en la variable de estado global
+        // Almacenar el estado global
         currentData = {
             positivos: positivos,
             negativos: negativos,
@@ -178,7 +178,6 @@ async function loadDashboardStats() {
             categorias: categoriasLimpias
         };
 
-        // Pintar gráficos iniciales
         updateCharts(positivos, negativos, neutrales, categoriasLimpias);
 
     } catch (error) {
