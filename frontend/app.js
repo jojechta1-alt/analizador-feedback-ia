@@ -109,11 +109,9 @@ async function loadDashboardStats() {
         let neutrales = totalReviews - positivos - negativos;
         if (neutrales < 0) neutrales = 0;
 
-        // --- ENRUTADOR DE CATEGORÍAS FIJO (EL ANTERIOR REQUERIDO) ---
-        // Inicializamos los contadores con base en las 5 categorías estables
+        // --- PROCESAMIENTO ESTABLE DE CATEGORÍAS ---
         let categoriasLimpias = { "Atención": 0, "Calidad": 0, "Precio": 0, "Envío": 0, "General": 0 };
         
-        // Procesamos la data cruda directamente para asegurar compatibilidad total con tus registros
         listaResenas.forEach(r => {
             let cat = String(r.category || '').toLowerCase().trim();
             if (cat === 'soporte' || cat === 'atención' || cat === 'atencion' || cat === 'servicio' || cat === 'atención al cliente') {
@@ -172,15 +170,14 @@ function updateCharts(positivos, negativos, neutrales, categorias) {
         }
     }
 
-    // --- GRÁFICO 2: TELARAÑA/RADAR (chart-category) CON LABELS FIJOS ORIGINALES ---
+    // --- GRÁFICO 2: NUEVO GRÁFICO DE BARRAS HORIZONTALES CON LEYENDA (Reemplaza a la telaraña) ---
     const ctxCategory = document.getElementById("chart-category");
     if (ctxCategory) {
         if (categoryChartInstance !== null) {
             categoryChartInstance.destroy();
         }
 
-        // Recuperar los valores correspondientes al orden exacto fijado en los labels
-        const valoresRadar = [
+        const valoresBarras = [
             categorias["Atención"] || 0,
             categorias["Calidad"] || 0,
             categorias["Precio"] || 0,
@@ -190,29 +187,47 @@ function updateCharts(positivos, negativos, neutrales, categorias) {
 
         try {
             categoryChartInstance = new Chart(ctxCategory, {
-                type: 'radar',
+                type: 'bar', // Cambiado a barras
                 data: {
-                    labels: ['Atención', 'Calidad', 'Precio', 'Envío', 'General'], // Estructura fija original
+                    labels: ['Atención', 'Calidad', 'Precio', 'Envío', 'General'],
                     datasets: [{
-                        label: 'Cantidad de Reseñas',
-                        data: valoresRadar,
-                        backgroundColor: 'rgba(147, 51, 234, 0.2)', 
-                        borderColor: 'rgb(147, 51, 234)',
-                        pointBackgroundColor: 'rgb(147, 51, 234)',
-                        borderWidth: 2
+                        label: 'Reseñas por Categoría', // Texto de la leyenda
+                        data: valoresBarras,
+                        backgroundColor: [
+                            'rgba(147, 51, 234, 0.7)',  // Morado para Atención
+                            'rgba(33, 150, 243, 0.7)',   // Azul para Calidad
+                            'rgba(255, 152, 0, 0.7)',   // Naranja para Precio
+                            'rgba(0, 150, 136, 0.7)',   // Tejan para Envío
+                            'rgba(158, 158, 158, 0.7)'  // Gris para General
+                        ],
+                        borderColor: [
+                            'rgb(147, 51, 234)',
+                            'rgb(33, 150, 243)',
+                            'rgb(255, 152, 0)',
+                            'rgb(0, 150, 136)',
+                            'rgb(158, 158, 158)'
+                        ],
+                        borderWidth: 1
                     }]
                 },
                 options: {
+                    indexAxis: 'y', // Hace que las barras sean horizontales (más fácil de leer)
                     responsive: true,
                     maintainAspectRatio: false,
                     scales: {
-                        r: {
+                        x: {
                             beginAtZero: true,
-                            ticks: { stepSize: 1 }
+                            ticks: { 
+                                stepSize: 1,
+                                precision: 0 // Evita números decimales en el eje X
+                            }
                         }
                     },
                     plugins: {
-                        legend: { display: false }
+                        legend: { 
+                            display: true, // Habilitar la leyenda solicitada
+                            position: 'top' 
+                        }
                     }
                 }
             });
