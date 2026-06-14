@@ -1,14 +1,14 @@
 // URL de tu API en Hugging Face Spaces (Asegúrate de que termine sin la barra / al final)
 const API_URL = "https://jota2001-analizador-feedback.hf.space";
 
-// Variables globales para guardar las instancias de los gráficos sus estructuras
+// Variables globales para guardar las instancias de los gráficos y poder destruirlos/actualizarlos
 let sentimentChartInstance = null;
 let categoryChartInstance = null;
 
-// Esperar a que el DOM esté completamente cargado
-document.addEventListener("DOMContentLoaded", () => {
-    // Cargar estadísticas iniciales al abrir la página
-    loadDashboardStats();
+// Esperar a que el DOM esté completamente cargado para activar los listeners
+document.addEventListener("DOMContentLoaded", async () => {
+    // Forzar la carga inicial de estadísticas con await
+    await loadDashboardStats();
 
     // Configurar el botón de análisis individual (ID exacto: btn-analyze-text)
     const btnAnalyze = document.getElementById("btn-analyze-text");
@@ -56,7 +56,7 @@ async function analyzeText() {
             showAlert(`¡Análisis completado! Sentimiento: ${result.data.sentiment}`, "success");
             textArea.value = ""; // Limpiar el cuadro de texto
             
-            // Recargar el dashboard inmediatamente para actualizar números y gráficos
+            // ESPERA CRUCIAL: Detener el flujo hasta que el backend termine de refrescar y devuelva las nuevas métricas
             await loadDashboardStats();
         } else {
             showAlert("El backend procesó la solicitud pero no reportó éxito.", "error");
@@ -73,25 +73,24 @@ async function analyzeText() {
 // =====================================================================
 async function loadDashboardStats() {
     try {
+        // Petición al endpoint del backend de Hugging Face
         const response = await fetch(`${API_URL}/api/dashboard-stats`);
         if (!response.ok) throw new Error("No se pudieron obtener las estadísticas.");
 
         const data = await response.json();
 
-        // 1. Mapear los IDs de tus tarjetas numéricas reales del HTML
+        // Mapear los elementos visuales de las tarjetas numéricas en tu HTML
         const totalEl = document.getElementById("stat-total");
         const posEl = document.getElementById("stat-pos");
         const negEl = document.getElementById("stat-neg");
 
-        // --- SISTEMA INTERNO DE PROTECCIÓN Y CONTEO ---
-        // Si el backend viene vacío, vamos a contar los datos directamente desde el JSON crudo (raw_data)
+        // Extraer los datos provenientes de la base de datos (con soporte por si el backend reporta contadores vacíos)
         let listaResenas = data.raw_data || [];
-        
         let positivos = data.positivo || 0;
         let negativos = data.negativo || 0;
         let totalReviews = data.total_reviews || 0;
 
-        // Si los contadores vinieron en 0 pero sí hay datos en la base de datos, recalculamos en vivo
+        // Recuento de respaldo directo en el frontend si los datos crudos existen pero venían en 0
         if (totalReviews === 0 && listaResenas.length > 0) {
             totalReviews = listaResenas.length;
             listaResenas.forEach(r => {
@@ -101,24 +100,21 @@ async function loadDashboardStats() {
             });
         }
 
-        // 2. Modificar el texto de forma segura comprobando que existan
+        // Actualizar los números de las tarjetas en caliente
         if (totalEl) totalEl.innerText = totalReviews;
         if (posEl) posEl.innerText = positivos;
         if (negEl) negEl.innerText = negativos;
 
-        // Calcular cuántos neutrales quedan de forma matemática
+        // Calcular la cuota de comentarios neutrales
         let neutrales = totalReviews - positivos - negativos;
         if (neutrales < 0) neutrales = 0;
 
-        // --- ENRUTADOR INTELIGENTE DE CATEGORÍAS ---
-        // Mapeamos lo que venga en minúsculas ("soporte", "producto") directamente al formato del gráfico
+        // Normalizar las categorías para que coincidan con lo que tengas en Supabase ("soporte", "producto", etc.)
         let categoriasLimpias = { "Atención": 0, "Calidad": 0, "Precio": 0, "Envío": 0, "General": 0 };
         
         if (data.categories && Object.keys(data.categories).length > 0 && data.total_reviews > 0) {
-            // Si el backend envió categorías procesadas, las usamos
             categoriasLimpias = data.categories;
         } else {
-            // Si no, las extraemos y normalizamos nosotros mismos desde Supabase en vivo
             listaResenas.forEach(r => {
                 let cat = String(r.category || '').toLowerCase().trim();
                 if (cat === 'soporte' || cat === 'atención' || cat === 'atencion' || cat === 'servicio') {
@@ -135,33 +131,35 @@ async function loadDashboardStats() {
             });
         }
 
-        // 3. Renderizar los gráficos usando el filtro corregido
+        // Enviar los números frescos al generador de gráficos
         updateCharts(positivos, negativos, neutrales, categoriasLimpias);
 
     } catch (error) {
-        console.error("Error cargando estadísticas:", error);
+        console.error("Error cargando estadísticas en tiempo real:", error);
     }
 }
 
 // =====================================================================
-// FUNCTION: RENDERIZAR / ACTUALIZAR GRÁFICOS (CHART.JS)
+// FUNCTION: RENDERIZAR / ACTUALIZAR GRÁFICOS DINÁMICAMENTE
 // =====================================================================
 function updateCharts(positivos, negativos, neutrales, categorias) {
-    // --- GRÁFICO 1: DISTRIBUCIÓN DE SENTIMIENTOS (ID exacto: chart-sentiment) ---
+    // --- GRÁFICO 1: SENTIMIENTOS (chart-sentiment) ---
     const ctxSentiment = document.getElementById("chart-sentiment");
     if (ctxSentiment) {
-        if (sentimentChartInstance) {
+        // PASO CLAVE: Si ya existía un gráfico previo pintado, lo destruimos por completo de la memoria
+        if (sentimentChartInstance !== null) {
             sentimentChartInstance.destroy();
         }
 
         try {
+            // Inicializar la nueva instancia con los datos actualizados
             sentimentChartInstance = new Chart(ctxSentiment, {
                 type: 'doughnut',
                 data: {
                     labels: ['Positivo', 'Neutral', 'Negativo'],
                     datasets: [{
                         data: [positivos, neutrales, negativos],
-                        backgroundColor: ['#2e7d32', '#757575', '#c62828'], // Verde, Gris, Rojo
+                        backgroundColor: ['#2e7d32', '#757575', '#c62828'], 
                         borderWidth: 1
                     }]
                 },
@@ -174,14 +172,15 @@ function updateCharts(positivos, negativos, neutrales, categorias) {
                 }
             });
         } catch (e) {
-            console.error("Error al crear gráfico de sentimientos:", e);
+            console.error("Error al actualizar gráfico de sentimientos:", e);
         }
     }
 
-    // --- GRÁFICO 2: CATEGORÍAS DETECTADAS (ID exacto: chart-category) ---
+    // --- GRÁFICO 2: CATEGORÍAS (chart-category) ---
     const ctxCategory = document.getElementById("chart-category");
     if (ctxCategory) {
-        if (categoryChartInstance) {
+        // PASO CLAVE: Si ya existía un radar previo pintado, lo eliminamos para evitar superposiciones
+        if (categoryChartInstance !== null) {
             categoryChartInstance.destroy();
         }
 
@@ -196,7 +195,7 @@ function updateCharts(positivos, negativos, neutrales, categorias) {
                     datasets: [{
                         label: 'Cantidad de Reseñas',
                         data: valoresCategorias.length ? valoresCategorias : [0, 0, 0, 0, 0],
-                        backgroundColor: 'rgba(147, 51, 234, 0.2)', // Morado traslúcido
+                        backgroundColor: 'rgba(147, 51, 234, 0.2)', 
                         borderColor: 'rgb(147, 51, 234)',
                         pointBackgroundColor: 'rgb(147, 51, 234)',
                         borderWidth: 2
@@ -217,7 +216,7 @@ function updateCharts(positivos, negativos, neutrales, categorias) {
                 }
             });
         } catch (e) {
-            console.error("Error al crear gráfico de categorías:", e);
+            console.error("Error al actualizar gráfico de categorías:", e);
         }
     }
 }
@@ -244,6 +243,8 @@ async function uploadCSV(event) {
 
         const result = await response.json();
         showAlert(`¡Éxito! Se procesaron ${result.total_processed} registros del CSV.`, "success");
+        
+        // Refrescar estadísticas tras la carga masiva
         await loadDashboardStats();
     } catch (error) {
         console.error("Error CSV:", error);
@@ -252,7 +253,7 @@ async function uploadCSV(event) {
 }
 
 // =====================================================================
-// FUNCTION AUXILIAR: MOSTRAR ALERTAS (ID exacto: quick-result)
+// FUNCTION AUXILIAR: ALERTAS (ID: quick-result)
 // =====================================================================
 function showAlert(message, type) {
     const alertBox = document.getElementById("quick-result");
