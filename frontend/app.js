@@ -10,13 +10,13 @@ document.addEventListener("DOMContentLoaded", () => {
     // Cargar estadísticas iniciales al abrir la página
     loadDashboardStats();
 
-    // Configurar el botón de análisis individual según tu HTML (id="btn-analyze-text")
+    // Configurar el botón de análisis individual (ID exacto: btn-analyze-text)
     const btnAnalyze = document.getElementById("btn-analyze-text");
     if (btnAnalyze) {
         btnAnalyze.addEventListener("click", analyzeText);
     }
 
-    // Configurar el input de carga masiva CSV según tu HTML (id="csv-input")
+    // Configurar el input de carga masiva CSV (ID exacto: csv-input)
     const fileInput = document.getElementById("csv-input");
     if (fileInput) {
         fileInput.addEventListener("change", uploadCSV);
@@ -78,12 +78,12 @@ async function loadDashboardStats() {
 
         const data = await response.json();
 
-        // 1. Mapear los IDs reales de tu archivo HTML
+        // 1. Mapear los IDs de tus tarjetas numéricas reales del HTML
         const totalEl = document.getElementById("stat-total");
         const posEl = document.getElementById("stat-pos");
         const negEl = document.getElementById("stat-neg");
 
-        // 2. Modificar el contenido de texto si existen
+        // 2. Modificar el texto de forma segura comprobando que existan
         if (totalEl) totalEl.innerText = data.total_reviews || 0;
         if (posEl) posEl.innerText = data.positivo || 0;
         if (negEl) negEl.innerText = data.negativo || 0;
@@ -95,7 +95,7 @@ async function loadDashboardStats() {
         let neutrales = totalReviews - positivos - negativos;
         if (neutrales < 0) neutrales = 0;
 
-        // 3. Renderizar o actualizar los gráficos directamente
+        // 3. Renderizar los gráficos usando los datos reales de Supabase
         updateCharts(positivos, negativos, neutrales, data.categories);
 
     } catch (error) {
@@ -107,7 +107,7 @@ async function loadDashboardStats() {
 // FUNCTION: RENDERIZAR / ACTUALIZAR GRÁFICOS (CHART.JS)
 // =====================================================================
 function updateCharts(positivos, negativos, neutrales, categorias) {
-    // --- GRÁFICO 1: DISTRIBUCIÓN DE SENTIMIENTOS (id="chart-sentiment") ---
+    // --- GRÁFICO 1: DISTRIBUCIÓN DE SENTIMIENTOS (ID exacto: chart-sentiment) ---
     const ctxSentiment = document.getElementById("chart-sentiment");
     if (ctxSentiment) {
         if (sentimentChartInstance) {
@@ -121,7 +121,7 @@ function updateCharts(positivos, negativos, neutrales, categorias) {
                     labels: ['Positivo', 'Neutral', 'Negativo'],
                     datasets: [{
                         data: [positivos, neutrales, negativos],
-                        backgroundColor: ['#2e7d32', '#757575', '#c62828'], 
+                        backgroundColor: ['#2e7d32', '#757575', '#c62828'], // Verde, Gris, Rojo
                         borderWidth: 1
                     }]
                 },
@@ -134,11 +134,11 @@ function updateCharts(positivos, negativos, neutrales, categorias) {
                 }
             });
         } catch (e) {
-            console.error("No se pudo inicializar el gráfico de sentimientos:", e);
+            console.error("Error al crear gráfico de sentimientos:", e);
         }
     }
 
-    // --- GRÁFICO 2: CATEGORÍAS DETECTADAS (id="chart-category") ---
+    // --- GRÁFICO 2: CATEGORÍAS DETECTADAS (ID exacto: chart-category) ---
     const ctxCategory = document.getElementById("chart-category");
     if (ctxCategory) {
         if (categoryChartInstance) {
@@ -156,7 +156,7 @@ function updateCharts(positivos, negativos, neutrales, categorias) {
                     datasets: [{
                         label: 'Cantidad de Reseñas',
                         data: valoresCategorias.length ? valoresCategorias : [0, 0, 0, 0, 0],
-                        backgroundColor: 'rgba(147, 51, 234, 0.2)', 
+                        backgroundColor: 'rgba(147, 51, 234, 0.2)', // Morado traslúcido
                         borderColor: 'rgb(147, 51, 234)',
                         pointBackgroundColor: 'rgb(147, 51, 234)',
                         borderWidth: 2
@@ -166,13 +166,18 @@ function updateCharts(positivos, negativos, neutrales, categorias) {
                     responsive: true,
                     maintainAspectRatio: false,
                     scales: {
-                        r: { beginAtZero: true, ticks: { stepSize: 1 } }
+                        r: {
+                            beginAtZero: true,
+                            ticks: { stepSize: 1 }
+                        }
                     },
-                    plugins: { legend: { display: false } }
+                    plugins: {
+                        legend: { display: false }
+                    }
                 }
             });
         } catch (e) {
-            console.error("No se pudo inicializar el gráfico de categorías:", e);
+            console.error("Error al crear gráfico de categorías:", e);
         }
     }
 }
@@ -207,13 +212,12 @@ async function uploadCSV(event) {
 }
 
 // =====================================================================
-// FUNCTION AUXILIAR: MOSTRAR ALERTAS VISUALES (id="quick-result")
+// FUNCTION AUXILIAR: MOSTRAR ALERTAS (ID exacto: quick-result)
 // =====================================================================
 function showAlert(message, type) {
     const alertBox = document.getElementById("quick-result");
     if (!alertBox) return;
 
-    // Remover clases previas para evitar conflictos de color de Bootstrap
     alertBox.className = "mt-3 alert rounded-3 small";
     alertBox.classList.remove("d-none");
     alertBox.innerText = message;
