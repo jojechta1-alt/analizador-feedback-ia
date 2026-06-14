@@ -1,197 +1,226 @@
+// URL de tu API en Hugging Face Spaces (Asegúrate de que termine sin la barra / al final)
 const API_URL = "https://jota2001-analizador-feedback.hf.space";
 
-// Variables globales para controlar las instancias de los gráficos
-let sentimentChart, categoryChart;
+// Variables globales para guardar las instancias de los gráficos
+let sentimentChartInstance = null;
+let categoryChartInstance = null;
 
-// Ejecutar automáticamente al cargar la página
+// Esperar a que el DOM esté completamente cargado
 document.addEventListener("DOMContentLoaded", () => {
-    // 1. Cargar estadísticas iniciales del Dashboard
+    // Cargar estadísticas iniciales al abrir la página
     loadDashboardStats();
 
-    // 2. Escuchar evento para el botón de analizar reseña individual
-    const btnAnalyzeText = document.getElementById("btn-analyze-text");
-    if (btnAnalyzeText) {
-        btnAnalyzeText.addEventListener("click", analyzeText);
+    // Configurar el botón de análisis individual
+    const btnAnalyze = document.getElementById("btnAnalyze");
+    if (btnAnalyze) {
+        btnAnalyze.addEventListener("click", analyzeText);
     }
 
-    // 3. Escuchar evento para la zona de Carga Masiva (CSV)
-    const csvInput = document.getElementById("csv-input");
-    if (csvInput) {
-        csvInput.addEventListener("change", handleCSVUpload);
+    // Configurar el input de carga masiva CSV
+    const fileInput = document.getElementById("csvFile");
+    if (fileInput) {
+        fileInput.addEventListener("change", uploadCSV);
     }
 });
 
 // =====================================================================
-// FUNCTION 1: OBTENER ESTADÍSTICAS DEL BACKEND Y RENDERIZAR MAPAS
-// =====================================================================
-async function loadDashboardStats() {
-    try {
-        const response = await fetch(`${API_URL}/api/dashboard-stats`);
-        const data = await response.json();
-
-        // Actualizar contadores numéricos en la interfaz de Bootstrap
-        document.getElementById("stat-total").innerText = data.total_reviews || 0;
-        document.getElementById("stat-pos").innerText = data.positivo || 0;
-        document.getElementById("stat-neg").innerText = data.negativo || 0;
-
-        // Estructurar los datos de sentimientos de manera segura para Chart.js
-        const sentimentData = {
-            positivo: data.positivo || 0,
-            neutral: data.total_reviews - (data.positivo + data.negativo) || 0,
-            negativo: data.negativo || 0
-        };
-
-        // Renderizar o actualizar los gráficos pasando los datos limpios
-        renderCharts(sentimentData, data.categories);
-    } catch (error) {
-        console.error("Error al cargar estadísticas del dashboard:", error);
-    }
-}
-
-// =====================================================================
-// FUNCTION 2: ENVIAR RESEÑA INDIVIDUAL A LA IA (GEMINI)
+// FUNCTION: ANALIZAR RESEÑA INDIVIDUAL
 // =====================================================================
 async function analyzeText() {
-    const textInput = document.getElementById("text-input");
-    const btn = document.getElementById("btn-analyze-text");
-    const resultDiv = document.getElementById("quick-result");
+    const textArea = document.getElementById("reviewInput");
+    const alertBox = document.getElementById("alertBox");
+    
+    if (!textArea || !textArea.value.trim()) {
+        showAlert("Por favor, escribe una opinión válida.", "error");
+        return;
+    }
 
-    if (!textInput.value.trim()) return alert("Por favor escribe una opinión antes de analizar.");
-
-    // Cambiar estado del botón a modo de carga (Spinner de Bootstrap)
-    btn.disabled = true;
-    btn.innerHTML = `<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Procesando con IA...`;
+    const textToSend = textArea.value.trim();
+    showAlert("Analizando con Inteligencia Artificial...", "info");
 
     try {
         const response = await fetch(`${API_URL}/api/analyze`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ review_text: textInput.value }) // Formato que espera el Pydantic BaseModel en FastAPI
+            headers: {
+                "Content-Type": "application/json"
+            },
+            body: JSON.stringify({ review_text: textToSend })
         });
-        
-        const resData = await response.json();
 
-        if (resData.status === "success") {
-            // Mostrar tarjeta de alerta verde de éxito
-            resultDiv.classList.remove("d-none", "alert-danger");
-            resultDiv.classList.add("alert-success");
-            resultDiv.innerHTML = `<strong>¡Análisis de IA Exitoso!</strong><br>
-                                    Sentimiento: <strong>${resData.data.sentiment.toUpperCase()}</strong><br>
-                                    Categoría: <strong>${resData.data.category.toUpperCase()}</strong>`;
-            
-            // Limpiar caja de texto y actualizar de inmediato el dashboard
-            textInput.value = "";
-            await loadDashboardStats();
-        } else {
+        if (!response.ok) {
             throw new Error("La respuesta del servidor no fue exitosa.");
         }
+
+        const result = await response.json();
+        
+        if (result.status === "success") {
+            showAlert(`¡Análisis completado! Sentimiento: ${result.data.sentiment}`, "success");
+            textArea.value = ""; // Limpiar el cuadro de texto
+            
+            // 🔥 CRUCIAL: Recargar el dashboard inmediatamente para actualizar números y gráficos
+            await loadDashboardStats();
+        } else {
+            showAlert("El backend procesó la solicitud pero no reportó éxito.", "error");
+        }
+
     } catch (error) {
-        console.error("Error analizando texto individual:", error);
-        resultDiv.classList.remove("d-none", "alert-success");
-        resultDiv.classList.add("alert-danger");
-        resultDiv.innerText = "Hubo un error al conectar con el servidor de IA.";
-    } finally {
-        // Devolver el botón a su estado normal
-        btn.disabled = false;
-        btn.innerHTML = `<i class="bi bi-stars me-2"></i>Analizar con IA`;
+        console.error("Error analizando texto:", error);
+        showAlert("Hubo un error al conectar con el servidor de IA.", "error");
     }
 }
 
 // =====================================================================
-// FUNCTION 3: PROCESAR CARGA MASIVA DE ARCHIVOS (BATCH CSV)
+// FUNCTION: OBTENER Y ACTUALIZAR ESTADÍSTICAS DEL DASHBOARD
 // =====================================================================
-async function handleCSVUpload(event) {
+async function loadDashboardStats() {
+    try {
+        const response = await fetch(`${API_URL}/api/dashboard-stats`);
+        if (!response.ok) throw new Error("No se pudieron obtener las estadísticas.");
+
+        const data = await response.json();
+
+        // 1. Actualizar los contadores de las tarjetas de arriba en el HTML
+        document.getElementById("totalReviewsCount").innerText = data.total_reviews || 0;
+        document.getElementById("positiveCount").innerText = data.positivo || 0;
+        document.getElementById("negativeCount").innerText = data.negativo || 0;
+
+        // Calcular cuántos neutrales quedan (totales menos positivos y negativos)
+        const neutrales = (data.total_reviews || 0) - (data.positivo || 0) - (data.negativo || 0);
+
+        // 2. Renderizar o actualizar los gráficos con los nuevos datos limpios
+        updateCharts(data.positivo, data.negativo, neutrales, data.categories);
+
+    } catch (error) {
+        console.error("Error cargando estadísticas:", error);
+    }
+}
+
+// =====================================================================
+// FUNCTION: RENDERIZAR / ACTUALIZAR GRÁFICOS (CHART.JS)
+// =====================================================================
+function updateCharts(positivos, negativos, neutrales, categorias) {
+    // --- GRÁFICO 1: DISTRIBUCIÓN DE SENTIMIENTOS (DONUT / PASTEL) ---
+    const ctxSentiment = document.getElementById("sentimentChart");
+    if (ctxSentiment) {
+        // Si ya existía un gráfico activo, lo destruimos por completo para evitar que se congele
+        if (sentimentChartInstance) {
+            sentimentChartInstance.destroy();
+        }
+
+        sentimentChartInstance = new Chart(ctxSentiment, {
+            type: 'doughnut',
+            data: {
+                labels: ['Positivo', 'Neutral', 'Negativo'],
+                datasets: [{
+                    data: [positivos, neutrales < 0 ? 0 : neutrales, negativos],
+                    backgroundColor: ['#2e7d32', '#757575', '#c62828'], // Verde, Gris, Rojo
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { position: 'bottom' }
+                }
+            }
+        });
+    }
+
+    // --- GRÁFICO 2: CATEGORÍAS DETECTADAS (RADAR / BARRAS) ---
+    const ctxCategory = document.getElementById("categoryChart");
+    if (ctxCategory) {
+        if (categoryChartInstance) {
+            categoryChartInstance.destroy();
+        }
+
+        // Extraer los valores que mandó el backend para el gráfico de radar
+        const labelsCategorias = Object.keys(categorias || {});
+        const valoresCategorias = Object.values(categorias || {});
+
+        categoryChartInstance = new Chart(ctxCategory, {
+            type: 'radar',
+            data: {
+                labels: labelsCategorias.length ? labelsCategorias : ['Atención', 'Calidad', 'Precio', 'Envío', 'General'],
+                datasets: [{
+                    label: 'Cantidad de Reseñas',
+                    data: valoresCategorias.length ? valoresCategorias : [0, 0, 0, 0, 0],
+                    backgroundColor: 'rgba(147, 51, 234, 0.2)', // Morado traslúcido
+                    borderColor: 'rgb(147, 51, 234)',
+                    pointBackgroundColor: 'rgb(147, 51, 234)',
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    r: {
+                        beginAtZero: true,
+                        ticks: { stepSize: 1 }
+                    }
+                },
+                plugins: {
+                    legend: { display: false }
+                }
+            }
+        });
+    }
+}
+
+// =====================================================================
+// FUNCTION: CARGA MASIVA DE CSV
+// =====================================================================
+async function uploadCSV(event) {
     const file = event.target.files[0];
     if (!file) return;
 
-    // Validación preventiva de tipo de archivo
-    if (!file.name.endsWith('.csv')) {
-        alert("Formato incorrecto. Por favor, sube un archivo que termine en .csv");
-        event.target.value = ""; 
-        return;
-    }
-
-    // Cambiar el estilo visual temporalmente o alertar al usuario
-    console.log("Subiendo lote CSV a Hugging Face...");
-
-    // Enviar archivo físico real usando multipart/form-data
     const formData = new FormData();
-    formData.append("file", file); // Coincide con UploadFile en FastAPI
+    formData.append("file", file);
+
+    showAlert("Procesando archivo CSV en lote...", "info");
 
     try {
         const response = await fetch(`${API_URL}/api/upload-csv`, {
             method: "POST",
-            body: formData // El navegador inyecta el 'Content-Type' correcto automáticamente
+            body: formData
         });
 
-        const resData = await response.json();
+        if (!response.ok) throw new Error("Error subiendo el archivo masivo.");
 
-        if (resData.status === "success") {
-            alert(`¡Carga Masiva Exitosa! La IA analizó con éxito ${resData.total_processed} filas de opiniones.`);
-            
-            // Recargar todas las métricas del tablero
-            await loadDashboardStats();
-        } else {
-            throw new Error(resData.detail || "Error interno procesando el lote.");
-        }
+        const result = await response.json();
+        showAlert(`¡Éxito! Se procesaron ${result.total_processed} registros del CSV.`, "success");
+        
+        // Recargar estadísticas para pintar todo el CSV en los gráficos
+        await loadDashboardStats();
     } catch (error) {
-        console.error("Error en la carga por lote (CSV):", error);
-        alert("Hubo un inconveniente al procesar las filas del CSV en Hugging Face.");
-    } finally {
-        // Limpiar el input de archivos para que el usuario pueda volver a subir el mismo u otro lote
-        event.target.value = "";
+        console.error("Error CSV:", error);
+        showAlert("Error al procesar el archivo masivo.", "error");
     }
 }
 
 // =====================================================================
-// FUNCTION 4: PINTAR Y REFRESCAR GRÁFICOS DE CHART.JS
+// FUNCTION AUXILIAR: MOSTRAR ALERTAS VISUALES
 // =====================================================================
-function renderCharts(sentimentData, categories) {
-    // Destruir instancias previas para evitar superposiciones raras al refrescar datos
-    if (sentimentChart) sentimentChart.destroy();
-    if (categoryChart) categoryChart.destroy();
+function showAlert(message, type) {
+    const alertBox = document.getElementById("alertBox");
+    if (!alertBox) return;
 
-    const safeCategories = categories || {};
+    alertBox.innerText = message;
+    alertBox.style.display = "block";
 
-    // Gráfico de Sentimientos (Doughnut / Rosquilla)
-    const ctxSentiment = document.getElementById('chart-sentiment').getContext('2d');
-    sentimentChart = new Chart(ctxSentiment, {
-        type: 'doughnut',
-        data: {
-            labels: ['Positivo', 'Neutral', 'Negativo'],
-            datasets: [{
-                data: [sentimentData.positivo, sentimentData.neutral, sentimentData.negativo],
-                backgroundColor: ['#198754', '#6c757d', '#dc3545'], // Éxito (Verde), Secundario (Gris), Peligro (Rojo)
-            }]
-        },
-        options: { 
-            responsive: true, 
-            maintainAspectRatio: false,
-            plugins: { legend: { position: 'bottom' } } 
-        }
-    });
-
-    // Gráfico de Categorías (Polar Area / Área Polar)
-    const ctxCategory = document.getElementById('chart-category').getContext('2d');
-    categoryChart = new Chart(ctxCategory, {
-        type: 'polarArea',
-        data: {
-            labels: ['Atención', 'Calidad', 'Precio', 'Envío', 'General'],
-            datasets: [{
-                data: [
-                    safeCategories["Atención"] || 0, 
-                    safeCategories["Calidad"] || 0, 
-                    safeCategories["Precio"] || 0, 
-                    safeCategories["Envío"] || 0, 
-                    safeCategories["General"] || 0
-                ],
-                backgroundColor: ['#ffc107', '#0dcaf0', '#0d6efd', '#f472b6', '#a855f7'], 
-            }]
-        },
-        options: { 
-            responsive: true, 
-            maintainAspectRatio: false,
-            plugins: { legend: { position: 'bottom' } } 
-        }
-    });
+    // Cambiar estilos según el tipo de respuesta
+    if (type === "success") {
+        alertBox.style.backgroundColor = "#d1e7dd";
+        alertBox.style.color = "#0f5132";
+        alertBox.style.borderColor = "#badbcc";
+    } else if (type === "error") {
+        alertBox.style.backgroundColor = "#f8d7da";
+        alertBox.style.color = "#842029";
+        alertBox.style.borderColor = "#f5c2c7";
+    } else {
+        alertBox.style.backgroundColor = "#cff4fc";
+        alertBox.style.color = "#055160";
+        alertBox.style.borderColor = "#b6effb";
+    }
 }
