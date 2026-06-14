@@ -1,7 +1,7 @@
 // URL de tu API en Hugging Face Spaces (Asegúrate de que termine sin la barra / al final)
 const API_URL = "https://jota2001-analizador-feedback.hf.space";
 
-// Variables globales para guardar las instancias de los gráficos
+// Variables globales para guardar las instancias de los gráficos sus estructuras
 let sentimentChartInstance = null;
 let categoryChartInstance = null;
 
@@ -83,20 +83,60 @@ async function loadDashboardStats() {
         const posEl = document.getElementById("stat-pos");
         const negEl = document.getElementById("stat-neg");
 
+        // --- SISTEMA INTERNO DE PROTECCIÓN Y CONTEO ---
+        // Si el backend viene vacío, vamos a contar los datos directamente desde el JSON crudo (raw_data)
+        let listaResenas = data.raw_data || [];
+        
+        let positivos = data.positivo || 0;
+        let negativos = data.negativo || 0;
+        let totalReviews = data.total_reviews || 0;
+
+        // Si los contadores vinieron en 0 pero sí hay datos en la base de datos, recalculamos en vivo
+        if (totalReviews === 0 && listaResenas.length > 0) {
+            totalReviews = listaResenas.length;
+            listaResenas.forEach(r => {
+                let sent = String(r.sentiment || '').toLowerCase().trim();
+                if (sent === 'positivo' || sent === 'positive') positivos++;
+                if (sent === 'negativo' || sent === 'negative') negativos++;
+            });
+        }
+
         // 2. Modificar el texto de forma segura comprobando que existan
-        if (totalEl) totalEl.innerText = data.total_reviews || 0;
-        if (posEl) posEl.innerText = data.positivo || 0;
-        if (negEl) negEl.innerText = data.negativo || 0;
+        if (totalEl) totalEl.innerText = totalReviews;
+        if (posEl) posEl.innerText = positivos;
+        if (negEl) negEl.innerText = negativos;
 
         // Calcular cuántos neutrales quedan de forma matemática
-        const totalReviews = data.total_reviews || 0;
-        const positivos = data.positivo || 0;
-        const negativos = data.negativo || 0;
         let neutrales = totalReviews - positivos - negativos;
         if (neutrales < 0) neutrales = 0;
 
-        // 3. Renderizar los gráficos usando los datos reales de Supabase
-        updateCharts(positivos, negativos, neutrales, data.categories);
+        // --- ENRUTADOR INTELIGENTE DE CATEGORÍAS ---
+        // Mapeamos lo que venga en minúsculas ("soporte", "producto") directamente al formato del gráfico
+        let categoriasLimpias = { "Atención": 0, "Calidad": 0, "Precio": 0, "Envío": 0, "General": 0 };
+        
+        if (data.categories && Object.keys(data.categories).length > 0 && data.total_reviews > 0) {
+            // Si el backend envió categorías procesadas, las usamos
+            categoriasLimpias = data.categories;
+        } else {
+            // Si no, las extraemos y normalizamos nosotros mismos desde Supabase en vivo
+            listaResenas.forEach(r => {
+                let cat = String(r.category || '').toLowerCase().trim();
+                if (cat === 'soporte' || cat === 'atención' || cat === 'atencion' || cat === 'servicio') {
+                    categoriasLimpias["Atención"]++;
+                } else if (cat === 'producto' || cat === 'calidad' || cat === 'articulo') {
+                    categoriasLimpias["Calidad"]++;
+                } else if (cat === 'precio' || cat === 'costo') {
+                    categoriasLimpias["Precio"]++;
+                } else if (cat === 'envío' || cat === 'envio' || cat === 'entrega') {
+                    categoriasLimpias["Envío"]++;
+                } else {
+                    categoriasLimpias["General"]++;
+                }
+            });
+        }
+
+        // 3. Renderizar los gráficos usando el filtro corregido
+        updateCharts(positivos, negativos, neutrales, categoriasLimpias);
 
     } catch (error) {
         console.error("Error cargando estadísticas:", error);
