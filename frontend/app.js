@@ -1,5 +1,4 @@
-const API_URL = "https://jota2001-analizador-feedback.hf.space";
-
+const API_URL = "https://jota2001-analizador-feedback.hf.space/proxy";
 // Variables globales para controlar las instancias de los gráficos
 let sentimentChart, categoryChart;
 
