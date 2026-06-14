@@ -72,6 +72,7 @@ async function analyzeText() {
 // =====================================================================
 // FUNCTION: OBTENER Y ACTUALIZAR ESTADÍSTICAS DEL DASHBOARD
 // =====================================================================
+
 async function loadDashboardStats() {
     try {
         const response = await fetch(`${API_URL}/api/dashboard-stats`);
@@ -79,19 +80,24 @@ async function loadDashboardStats() {
 
         const data = await response.json();
 
-        // 1. Actualizar los contadores de las tarjetas de arriba en el HTML
-        document.getElementById("totalReviewsCount").innerText = data.total_reviews || 0;
-        document.getElementById("positiveCount").innerText = data.positivo || 0;
-        document.getElementById("negativeCount").innerText = data.negativo || 0;
+        // 1. Buscar las tarjetas por cualquier combinación posible de IDs que puedas tener en tu HTML
+        const totalEl = document.getElementById("totalReviewsCount") || document.getElementById("totalReviews") || document.getElementById("total-reviews");
+        const posEl = document.getElementById("positiveCount") || document.getElementById("positivo") || document.getElementById("positives");
+        const negEl = document.getElementById("negativeCount") || document.getElementById("negativo") || document.getElementById("negatives");
 
-        // Calcular cuántos neutrales quedan (totales menos positivos y negativos)
+        // 2. Actualizar el texto SOLO si el elemento realmente existe en la página (Evita el error 'innerText' de null)
+        if (totalEl) { totalEl.innerText = data.total_reviews || 0; }
+        if (posEl) { posEl.innerText = data.positivo || 0; }
+        if (negEl) { negEl.innerText = data.negativo || 0; }
+
+        // Calcular cuántos neutrales quedan de forma matemática
         const neutrales = (data.total_reviews || 0) - (data.positivo || 0) - (data.negativo || 0);
 
-        // 2. Renderizar o actualizar los gráficos con los nuevos datos limpios
-        updateCharts(data.positivo, data.negativo, neutrales, data.categories);
+        // 3. Renderizar o actualizar los gráficos de forma segura
+        updateCharts(data.positivo, data.negativo, neutrales < 0 ? 0 : neutrales, data.categories);
 
     } catch (error) {
-        console.error("Error cargando estadísticas:", error);
+        console.error("Error cargando estadísticas protegido:", error);
     }
 }
 
