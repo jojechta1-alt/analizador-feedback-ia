@@ -56,7 +56,7 @@ async function analyzeText() {
             showAlert(`¡Análisis completado! Sentimiento: ${result.data.sentiment}`, "success");
             textArea.value = ""; // Limpiar el cuadro de texto
             
-            // ESPERA CRUCIAL: Detener el flujo hasta que el backend termine de refrescar y devuelva las nuevas métricas
+            // Esperar a que el backend guarde y refrescar inmediatamente
             await loadDashboardStats();
         } else {
             showAlert("El backend procesó la solicitud pero no reportó éxito.", "error");
@@ -84,7 +84,7 @@ async function loadDashboardStats() {
         const posEl = document.getElementById("stat-pos");
         const negEl = document.getElementById("stat-neg");
 
-        // Extraer los datos provenientes de la base de datos (con soporte por si el backend reporta contadores vacíos)
+        // Extraer los datos provenientes de la base de datos
         let listaResenas = data.raw_data || [];
         let positivos = data.positivo || 0;
         let negativos = data.negativo || 0;
@@ -109,27 +109,25 @@ async function loadDashboardStats() {
         let neutrales = totalReviews - positivos - negativos;
         if (neutrales < 0) neutrales = 0;
 
-        // Normalizar las categorías para que coincidan con lo que tengas en Supabase ("soporte", "producto", etc.)
+        // --- ENRUTADOR DE CATEGORÍAS FIJO (EL ANTERIOR REQUERIDO) ---
+        // Inicializamos los contadores con base en las 5 categorías estables
         let categoriasLimpias = { "Atención": 0, "Calidad": 0, "Precio": 0, "Envío": 0, "General": 0 };
         
-        if (data.categories && Object.keys(data.categories).length > 0 && data.total_reviews > 0) {
-            categoriasLimpias = data.categories;
-        } else {
-            listaResenas.forEach(r => {
-                let cat = String(r.category || '').toLowerCase().trim();
-                if (cat === 'soporte' || cat === 'atención' || cat === 'atencion' || cat === 'servicio') {
-                    categoriasLimpias["Atención"]++;
-                } else if (cat === 'producto' || cat === 'calidad' || cat === 'articulo') {
-                    categoriasLimpias["Calidad"]++;
-                } else if (cat === 'precio' || cat === 'costo') {
-                    categoriasLimpias["Precio"]++;
-                } else if (cat === 'envío' || cat === 'envio' || cat === 'entrega') {
-                    categoriasLimpias["Envío"]++;
-                } else {
-                    categoriasLimpias["General"]++;
-                }
-            });
-        }
+        // Procesamos la data cruda directamente para asegurar compatibilidad total con tus registros
+        listaResenas.forEach(r => {
+            let cat = String(r.category || '').toLowerCase().trim();
+            if (cat === 'soporte' || cat === 'atención' || cat === 'atencion' || cat === 'servicio' || cat === 'atención al cliente') {
+                categoriasLimpias["Atención"]++;
+            } else if (cat === 'producto' || cat === 'calidad' || cat === 'articulo' || cat === 'artículo') {
+                categoriasLimpias["Calidad"]++;
+            } else if (cat === 'precio' || cat === 'costo' || cat === 'tarifa') {
+                categoriasLimpias["Precio"]++;
+            } else if (cat === 'envío' || cat === 'envio' || cat === 'entrega' || cat === 'delivery') {
+                categoriasLimpias["Envío"]++;
+            } else {
+                categoriasLimpias["General"]++;
+            }
+        });
 
         // Enviar los números frescos al generador de gráficos
         updateCharts(positivos, negativos, neutrales, categoriasLimpias);
@@ -146,13 +144,11 @@ function updateCharts(positivos, negativos, neutrales, categorias) {
     // --- GRÁFICO 1: SENTIMIENTOS (chart-sentiment) ---
     const ctxSentiment = document.getElementById("chart-sentiment");
     if (ctxSentiment) {
-        // PASO CLAVE: Si ya existía un gráfico previo pintado, lo destruimos por completo de la memoria
         if (sentimentChartInstance !== null) {
             sentimentChartInstance.destroy();
         }
 
         try {
-            // Inicializar la nueva instancia con los datos actualizados
             sentimentChartInstance = new Chart(ctxSentiment, {
                 type: 'doughnut',
                 data: {
@@ -176,25 +172,30 @@ function updateCharts(positivos, negativos, neutrales, categorias) {
         }
     }
 
-    // --- GRÁFICO 2: CATEGORÍAS (chart-category) ---
+    // --- GRÁFICO 2: TELARAÑA/RADAR (chart-category) CON LABELS FIJOS ORIGINALES ---
     const ctxCategory = document.getElementById("chart-category");
     if (ctxCategory) {
-        // PASO CLAVE: Si ya existía un radar previo pintado, lo eliminamos para evitar superposiciones
         if (categoryChartInstance !== null) {
             categoryChartInstance.destroy();
         }
 
-        const labelsCategorias = Object.keys(categorias || {});
-        const valoresCategorias = Object.values(categorias || {});
+        // Recuperar los valores correspondientes al orden exacto fijado en los labels
+        const valoresRadar = [
+            categorias["Atención"] || 0,
+            categorias["Calidad"] || 0,
+            categorias["Precio"] || 0,
+            categorias["Envío"] || 0,
+            categorias["General"] || 0
+        ];
 
         try {
             categoryChartInstance = new Chart(ctxCategory, {
                 type: 'radar',
                 data: {
-                    labels: labelsCategorias.length ? labelsCategorias : ['Atención', 'Calidad', 'Precio', 'Envío', 'General'],
+                    labels: ['Atención', 'Calidad', 'Precio', 'Envío', 'General'], // Estructura fija original
                     datasets: [{
                         label: 'Cantidad de Reseñas',
-                        data: valoresCategorias.length ? valoresCategorias : [0, 0, 0, 0, 0],
+                        data: valoresRadar,
                         backgroundColor: 'rgba(147, 51, 234, 0.2)', 
                         borderColor: 'rgb(147, 51, 234)',
                         pointBackgroundColor: 'rgb(147, 51, 234)',
@@ -243,8 +244,6 @@ async function uploadCSV(event) {
 
         const result = await response.json();
         showAlert(`¡Éxito! Se procesaron ${result.total_processed} registros del CSV.`, "success");
-        
-        // Refrescar estadísticas tras la carga masiva
         await loadDashboardStats();
     } catch (error) {
         console.error("Error CSV:", error);
