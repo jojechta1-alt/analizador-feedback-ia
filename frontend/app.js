@@ -10,14 +10,18 @@ document.addEventListener("DOMContentLoaded", () => {
     // Cargar estadísticas iniciales al abrir la página
     loadDashboardStats();
 
-    // Configurar el botón de análisis individual
-    const btnAnalyze = document.getElementById("btnAnalyze");
+    // Configurar el botón de análisis individual de forma segura
+    const btnAnalyze = document.getElementById("btnAnalyze") || document.querySelector("button[onclick*='analyze']");
     if (btnAnalyze) {
         btnAnalyze.addEventListener("click", analyzeText);
+    } else {
+        // Respaldo por si el ID cambió: buscar el primer botón que sirva para analizar
+        const fallbackBtn = document.querySelector("button");
+        if (fallbackBtn) fallbackBtn.addEventListener("click", analyzeText);
     }
 
     // Configurar el input de carga masiva CSV
-    const fileInput = document.getElementById("csvFile");
+    const fileInput = document.getElementById("csvFile") || document.querySelector("input[type='file']");
     if (fileInput) {
         fileInput.addEventListener("change", uploadCSV);
     }
@@ -27,8 +31,7 @@ document.addEventListener("DOMContentLoaded", () => {
 // FUNCTION: ANALIZAR RESEÑA INDIVIDUAL
 // =====================================================================
 async function analyzeText() {
-    const textArea = document.getElementById("reviewInput");
-    const alertBox = document.getElementById("alertBox");
+    let textArea = document.getElementById("reviewInput") || document.querySelector("textarea");
     
     if (!textArea || !textArea.value.trim()) {
         showAlert("Por favor, escribe una opinión válida.", "error");
@@ -57,7 +60,7 @@ async function analyzeText() {
             showAlert(`¡Análisis completado! Sentimiento: ${result.data.sentiment}`, "success");
             textArea.value = ""; // Limpiar el cuadro de texto
             
-            // 🔥 CRUCIAL: Recargar el dashboard inmediatamente para actualizar números y gráficos
+            // Recargar el dashboard inmediatamente para actualizar números y gráficos
             await loadDashboardStats();
         } else {
             showAlert("El backend procesó la solicitud pero no reportó éxito.", "error");
@@ -72,7 +75,6 @@ async function analyzeText() {
 // =====================================================================
 // FUNCTION: OBTENER Y ACTUALIZAR ESTADÍSTICAS DEL DASHBOARD
 // =====================================================================
-
 async function loadDashboardStats() {
     try {
         const response = await fetch(`${API_URL}/api/dashboard-stats`);
@@ -106,35 +108,39 @@ async function loadDashboardStats() {
 // =====================================================================
 function updateCharts(positivos, negativos, neutrales, categorias) {
     // --- GRÁFICO 1: DISTRIBUCIÓN DE SENTIMIENTOS (DONUT / PASTEL) ---
-    const ctxSentiment = document.getElementById("sentimentChart");
+    const ctxSentiment = document.getElementById("sentimentChart") || document.getElementById("chartSentiment") || document.querySelector("canvas");
     if (ctxSentiment) {
         // Si ya existía un gráfico activo, lo destruimos por completo para evitar que se congele
         if (sentimentChartInstance) {
             sentimentChartInstance.destroy();
         }
 
-        sentimentChartInstance = new Chart(ctxSentiment, {
-            type: 'doughnut',
-            data: {
-                labels: ['Positivo', 'Neutral', 'Negativo'],
-                datasets: [{
-                    data: [positivos, neutrales < 0 ? 0 : neutrales, negativos],
-                    backgroundColor: ['#2e7d32', '#757575', '#c62828'], // Verde, Gris, Rojo
-                    borderWidth: 1
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: { position: 'bottom' }
+        try {
+            sentimentChartInstance = new Chart(ctxSentiment, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Positivo', 'Neutral', 'Negativo'],
+                    datasets: [{
+                        data: [positivos, neutrales, negativos],
+                        backgroundColor: ['#2e7d32', '#757575', '#c62828'], // Verde, Gris, Rojo
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { position: 'bottom' }
+                    }
                 }
-            }
-        });
+            });
+        } catch (e) {
+            console.error("Error al crear gráfico de sentimientos:", e);
+        }
     }
 
     // --- GRÁFICO 2: CATEGORÍAS DETECTADAS (RADAR / BARRAS) ---
-    const ctxCategory = document.getElementById("categoryChart");
+    const ctxCategory = document.getElementById("categoryChart") || document.getElementById("chartCategory") || document.querySelectorAll("canvas")[1];
     if (ctxCategory) {
         if (categoryChartInstance) {
             categoryChartInstance.destroy();
@@ -144,33 +150,37 @@ function updateCharts(positivos, negativos, neutrales, categorias) {
         const labelsCategorias = Object.keys(categorias || {});
         const valoresCategorias = Object.values(categorias || {});
 
-        categoryChartInstance = new Chart(ctxCategory, {
-            type: 'radar',
-            data: {
-                labels: labelsCategorias.length ? labelsCategorias : ['Atención', 'Calidad', 'Precio', 'Envío', 'General'],
-                datasets: [{
-                    label: 'Cantidad de Reseñas',
-                    data: valoresCategorias.length ? valoresCategorias : [0, 0, 0, 0, 0],
-                    backgroundColor: 'rgba(147, 51, 234, 0.2)', // Morado traslúcido
-                    borderColor: 'rgb(147, 51, 234)',
-                    pointBackgroundColor: 'rgb(147, 51, 234)',
-                    borderWidth: 2
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    r: {
-                        beginAtZero: true,
-                        ticks: { stepSize: 1 }
-                    }
+        try {
+            categoryChartInstance = new Chart(ctxCategory, {
+                type: 'radar',
+                data: {
+                    labels: labelsCategorias.length ? labelsCategorias : ['Atención', 'Calidad', 'Precio', 'Envío', 'General'],
+                    datasets: [{
+                        label: 'Cantidad de Reseñas',
+                        data: valoresCategorias.length ? valoresCategorias : [0, 0, 0, 0, 0],
+                        backgroundColor: 'rgba(147, 51, 234, 0.2)', // Morado traslúcido
+                        borderColor: 'rgb(147, 51, 234)',
+                        pointBackgroundColor: 'rgb(147, 51, 234)',
+                        borderWidth: 2
+                    }]
                 },
-                plugins: {
-                    legend: { display: false }
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        r: {
+                            beginAtZero: true,
+                            ticks: { stepSize: 1 }
+                        }
+                    },
+                    plugins: {
+                        legend: { display: false }
+                    }
                 }
-            }
-        });
+            });
+        } catch (e) {
+            console.error("Error al crear gráfico de categorías:", e);
+        }
     }
 }
 
@@ -209,8 +219,12 @@ async function uploadCSV(event) {
 // FUNCTION AUXILIAR: MOSTRAR ALERTAS VISUALES
 // =====================================================================
 function showAlert(message, type) {
-    const alertBox = document.getElementById("alertBox");
-    if (!alertBox) return;
+    const alertBox = document.getElementById("alertBox") || document.getElementById("alert") || document.getElementById("mensaje");
+    if (!alertBox) {
+        // Respaldo por si no existe la caja en el HTML: usar alerta de navegador integrada
+        alert(message);
+        return;
+    }
 
     alertBox.innerText = message;
     alertBox.style.display = "block";
