@@ -1,4 +1,4 @@
-const API_URL = "https://analizador-feedback-ia.onrender.com/api";
+const API_URL = "/api";
 
 // Variables globales para controlar las instancias de los gráficos
 let sentimentChart, categoryChart;
